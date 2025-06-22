@@ -1,0 +1,90 @@
+#!/usr/bin/env python3
+
+import pandas as pd
+from scipy import stats
+import numpy as np
+#from collections import defaultdict
+
+def read_tsv_file(file_path):
+    return pd.read_csv(file_path, sep='\t', header=None)
+
+def calculate_averages(dataframe):
+    avg_third_col = dataframe.iloc[:, 2].mean()
+    avg_fourth_col = dataframe.iloc[:, 3].mean()
+    avg_fifth_col = dataframe.iloc[:, 4].mean()
+    print("Count: {}".format(len(dataframe.iloc[:, 4])))
+    return avg_third_col, avg_fourth_col, avg_fifth_col
+
+def perform_t_test(dataframe):
+    third_col_values = dataframe.iloc[:, 2]
+    fourth_col_values = dataframe.iloc[:, 3]
+    t_stat, p_value = stats.ttest_ind(third_col_values, fourth_col_values)
+    return t_stat, p_value
+
+
+def calculate_confidence_interval(dataframe, confidence=0.95):
+    fifth_col_values = dataframe.iloc[:, 4]
+    mean = np.mean(fifth_col_values)
+    sem = stats.sem(fifth_col_values)  # Standard error of the mean
+    margin_of_error = sem * stats.t.ppf((1 + confidence) / 2., len(fifth_col_values) - 1)
+
+    return margin_of_error#mean - margin_of_error, mean + margin_of_error
+
+def main():
+    file_path = 'mass_log.txt'
+    dataframe = read_tsv_file(file_path)
+    
+
+    rels = set(dataframe.iloc[:,0])
+
+
+    all_count = 0
+    used_count = 0
+    
+    # with open("../grail_master/data/fb237_v4/train.txt", "r") as fp:
+    # #with open("mass_log_33.txt", "r") as fp:
+    #     lines = fp.readlines()
+    #     for line in lines:
+    #         line = line.split()
+    #         all_count += 1
+    #         if line[1] in rels:
+    #             used_count += 1
+
+    # print("Cover: {}/{} = {}".format(used_count, all_count, used_count/all_count))
+
+    avg_third_col, avg_fourth_col, avg_fifth_col = calculate_averages(dataframe)
+    print(f"Average of the third column: {avg_third_col}")
+    print(f"Average of the fourth column: {avg_fourth_col}")
+    print("Average of the fifth column: {}".format(avg_fifth_col/60))
+
+    t_stat, p_value = perform_t_test(dataframe)
+    print(f"T-statistic: {t_stat}")
+    print(f"P-value: {p_value}")
+
+
+
+    moe = calculate_confidence_interval(dataframe)
+    print("Conf interval +- {}".format(moe/60))
+
+    print(dataframe.keys()  )
+
+    left = 0
+    right = 0
+    same = 0
+    for _, row in dataframe.iterrows():
+        if row[2] > row[3]:
+            left += 1
+        elif row[3] > row[2]:
+            right += 1
+        else:
+            same += 1
+    print("LEFT: {}\t RIGHT: {}\t SAME: {}".format(left, right, same))
+
+
+    if p_value < 0.05:
+        print("The difference between the third and fourth columns is statistically significant.")
+    else:
+        print("The difference between the third and fourth columns is not statistically significant.")
+
+if __name__ == "__main__":
+    main()

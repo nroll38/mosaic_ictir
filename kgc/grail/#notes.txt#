@@ -1,0 +1,20 @@
+;; This buffer is for text that is not saved, and for Lisp evaluation.
+;; To create a file, visit it with C-x C-f and enter text in its buffer.
+
+
+Ideas:
+
+Evaluators:
+- variation in number of secrets which see change AND ID of secrets which se change
+  - NBF most consistent
+  - RuleN largest number
+
+- RuleN issues as evaluator (done-ish)
+
+Nominators:
+	- Grail best RuleN
+	- RN best GR, BF
+	  - here point out KGC perf != 
+
+
+

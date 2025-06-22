@@ -1,0 +1,745 @@
+import numpy as np
+from tqdm import tqdm
+import csv
+import random
+import copy
+
+
+#NB change order for different structures
+def add_data(ds,  r, s, o):
+
+    if r not in ds:
+        ds[r] = {}
+    if s not in ds[r]:
+        ds[r][s] = []
+    ds[r][s].append(o)
+
+def load_data(fp):
+    data = {}
+    data_s = {}
+
+    with open(fp, "r") as fd:
+        rd = csv.reader(fd, delimiter="\t")
+        for row in rd:
+            (s, r, o)  = row
+            
+            # if r not in data:
+            #     data[r] = {}
+            # if s not in data[r]:
+            #     data[r][s] = [o]
+            # else:
+            #     data[r][s].append(o)
+            add_data(data, r, s, o)
+
+            # if s not in data_s:
+            #     data_s[s] = {}
+            # if r not in data_s[s]:
+            #     data_s[s][r] = [o]
+            # else:
+            #     data_s[s][r].append(o)
+            add_data(data_s, s, r, o)
+    
+    return data, data_s
+
+#randomly select target tuple
+def select_target(data):
+
+    r, s_dict = random.choice(list(data.items()))
+    s, o_list = random.choice(list(s_dict.items()))
+    o = random.choice(o_list)
+    
+    
+    return (s,r,o)
+
+#given s, target, steps, find surrounding nodes and recusively call until target found or max steps(k) reached
+def find_surrounding_nodes(data_s, s, target_o, steps, k, paths, prev_path):
+    if s not in data_s:
+        return
+    
+    for r, o_list in data_s[s].items():
+        for o in o_list:
+            #print("PREV PATH: {}".format(len(prev_path)))
+            cur_path = prev_path + (r,)
+            #print("CUR PATH: {}".format(len(cur_path)))
+            #print("CUR PATH: {}".format(cur_path))
+            if o == target_o:
+                path = tuple(cur_path)
+                #print("PATH: {}".format(path))
+                if path not in paths:
+                    paths[path] = 1
+                else:
+                    paths[path] += 1
+                continue
+            if steps < k-1:
+                find_surrounding_nodes(data_s, o, target_o, steps + 1, k, paths, cur_path)
+                
+                    
+    
+
+#given r, random sample relations to find path prominence
+def random_sample_relation(data, data_s, relation, sample_no=10, k = 2):
+    rel_dict = data[relation]
+    s_list = list(rel_dict.keys())
+    
+    #TODO: SO_LIST for multiple o's with same sr
+    if len(s_list) == 0:
+        return {}
+    chosen_s = random.sample(s_list, min(sample_no, len(s_list)))
+
+    paths = {}
+    
+    
+
+    for s in chosen_s:
+        cur_path = ()
+        steps = 0
+        target_o = rel_dict[s][0]
+        
+        find_surrounding_nodes(data_s, s, target_o, steps, k, paths, cur_path)
+        #visited = set()
+        #visited.add(s)
+        #target_o = rel_dict[s][0]
+        #depth = 0
+
+        
+        #for r in data_s[s].keys():
+            
+            
+            
+        
+    
+
+        
+    #print(len(paths))
+    pks = paths.keys()
+    for k in pks:
+        paths[k] = min(paths[k]/len(chosen_s), 1.0)
+    return paths
+
+def path_check(s, path, hop, data_s):
+    found = []
+    if len(path) == hop:
+        return [s]
+    r = path[hop]
+    if s in data_s and r in data_s[s]:
+        for o in data_s[s][r]:
+            found += path_check(o, path, hop + 1, data_s)
+    return found
+
+#given s and r, what is best o?
+def rulen(s, r, o, paths, data, data_s, rules, max_sub=0):
+    all_found = []
+    for path in paths:
+       found = path_check(s, path, 0, data_s)
+       if found:
+           all_found.append((found, path, paths[path]))
+           
+    all_found.sort(key = lambda x: x[2], reverse=True)
+
+    top_choice = set()
+    second = []
+
+    top = 0
+    second_score = 0
+    num_rem = 0
+    j=0
+    while(True):
+        j = 0
+        for found, path, num in all_found:
+            #print(found)
+            #print(path)
+            #print(num)
+            if not top_choice:
+                for i in found:
+                    top_choice.add(i)
+                top = num
+                if num_rem > j:
+                    j += 1
+                    top_choice = set()
+            else:
+                if num >= second_score:
+                    second_score = num
+                else:
+                    remove = []
+                    for i in top_choice:
+                        if i not in second:
+                            remove.append(i)
+                    for i in remove:
+                        top_choice.remove(i)
+                    second = []
+                second += found
+        if num_rem < max_sub and o in top_choice:
+            print("REMOVED!")
+            top_choice = set()
+            num_rem += 1
+        else:
+            break
+
+            
+    print(top_choice)
+    print(top)
+    print(o)
+
+    ret = False
+    if o in top_choice:
+        ret = True
+    
+    return ret, top, num_rem
+
+#given s and o, should r exist?
+def rulen_mod(s, r, o, paths, data, data_s,  max_sub=0):
+    all_found = []
+    for path in paths:
+       found = path_check(s, path, 0, data_s)
+       if found:
+           all_found.append((found, path, paths[path]))
+           #print(paths[path])
+
+    #all_found.sort(key = lambda x: x[2], reverse=True)
+    #print("PATHS: {}".format(len(paths)))
+    #print("AF: {}".format(len(all_found)))
+
+    top_choice = set()
+    second = []
+
+    top = 0
+    second_score = 0
+    num_rem = 0
+    j = 0
+    
+    found_list = []
+
+    for found, path, num in all_found:
+        #print(found)
+        #print(path)
+        #print(num)
+        if o in found:
+            found_list.append((found, path, num))
+            if top == 0:
+                top = num
+            
+            
+    #print(top_choice)
+    #print(top)
+    #print(o)
+
+    ret = False
+    if o in top_choice:
+        ret = True
+    
+    return top, found_list
+
+
+def del_data(data, r, s, o):
+    if r in data:
+        if s in data[r]:
+            #print(data[r][s])
+            if o in data[r][s]:
+                data[r][s].remove(o)
+            #else:
+            #    print("BAD O")
+            if len(data[r][s]) == 0:
+                del data[r][s]
+            
+        else:
+            print("BAD S")
+    else:
+        print("BAD R")
+        #if len(data[r]) == 0:
+        #    del data[r]
+    return data
+
+
+def remove_r(data, data_s, rem_data, s, path, o):
+
+    rem_link = path[0]
+
+    add_data(rem_data, rem_link, s, o)
+
+    cr, cs, co = get_len(data)
+    #print("DEL B: {}, {}, {}".format(cr, cs, co))
+    data = del_data(data, rem_link, s, o)
+    
+    cr, cs, co = get_len(data)
+    #print("DEL A: {}, {}, {}".format(cr, cs, co))
+    data_s = del_data(data_s, s, rem_link, o)
+    
+    #print("DEL")
+    return data, data_s, rem_data
+
+def restore(data, data_s, rem_data):
+    for r in rem_data:
+        for s in rem_data[r]:
+            for o in rem_data[r][s]:
+                add_data(data, r, s, o)
+                add_data(data_s, s, r, o)
+
+    return data, data_s, rem_data
+    
+
+ #TEMP:
+def get_len(ds):
+    count_r=0
+    count_s=0
+    count_o = 0
+    r_set = set()
+    for r in ds:
+        r_set.update(r)
+        s_set = set()
+        for s in ds[r]:
+            s_set.update(s)
+            o_set = set()
+            for o in ds[r][s]:
+                o_set.update(o)
+            count_o += len(o_set)
+        count_s += len(s_set)
+    count_r += len(r_set)
+
+    return count_r, count_s, count_o
+
+
+def do_orig(data_fp):
+
+    o_data, o_data_s = load_data(data_fp)
+    rem_data_targ = {}
+    rem_data_subs = {}
+    random.seed(123)
+    count = 0
+    ten_count = 0
+    scores = []
+    ranks = []
+    rem1 = 0
+    rem2 = 0
+    rules = {}
+
+    rs = o_data.keys()
+
+    sub = 0
+    k = 5
+
+    found_dict = {}
+    
+    data = copy.deepcopy(o_data)
+    data_s = copy.deepcopy(o_data_s)
+
+ 
+
+    
+    cr, cs, co = get_len(data)
+    print("BEFORE: {},{},{}".format(cr, cs, co))
+                
+    
+    for i in tqdm(range(100)):
+        ret = None
+        cur_sub = sub
+        
+        s,r,o = select_target(data)
+        data, data_s, rem_data_targ = remove_r(data, data_s, rem_data_targ, s, [r], o)
+        #cr, cs, co = get_len(data)
+        #print("REM: {},{},{}".format(cr, cs, co))
+        
+        while(ret==None):
+            top_rule_list = []
+
+            # data = copy.deepcopy(o_data)
+            # data_s = copy.deepcopy(o_data_s)
+            # s,r,o = select_target(data)
+
+            # data[r][s].remove(o)
+            # if len(data[r][s]) < 1:
+            #     del data[r][s]
+
+            # data_s[s][r].remove(o)
+            # if len(data_s[s][r]) < 1:
+            #     del data_s[s][r]
+
+            
+            
+            all_found_list = {}
+            
+            #print("S: {}\t O: {}\t R: {}".format(s,o, r))
+            #print(data_s['/m/0c8wxp'])
+            for r_check in rs:
+                #print("On rule {}".format(r_check))
+                if r_check not in rules:
+                    paths = random_sample_relation(data, data_s, r_check, sample_no=30, k = k)
+
+                    sorted_paths = {k: v for k, v in sorted(paths.items(), key=lambda item: item[1], reverse=True)}
+
+                    if (r_check,) in sorted_paths:
+                        del sorted_paths[r_check,]
+                    rules[r_check] = sorted_paths
+
+                #print(sorted_paths)
+
+
+                #res, num, rem = rulen_mod(s, r, o, rules[r], data, data_s, max_sub=0)
+                num, found_list = rulen_mod(s, r_check, o, rules[r_check], data, data_s, max_sub=0)
+                top_rule_list.append((r_check, num))
+                if found_list:
+                    #print("FOUND LIST: {}".format(found_list))
+                    all_found_list[r_check] = found_list
+
+            top_rule_list.sort(key=lambda x: x[1], reverse=True)
+            for i, (r_rank, score) in enumerate(top_rule_list):
+                if r == r_rank:
+                    #print("R at rank {}".format(i))
+                    break
+            if cur_sub > 0 and i == 0:
+                cur_sub -=1
+
+                #print(all_found_list)
+                try:
+                    data, data_s, rem_data_subs = remove_r(data, data_s, rem_data_subs, s, all_found_list[r][0][1], o)
+                except:
+                    print("WHY?")
+                    continue
+                
+            else:
+                ret = True
+                if i  == 0:
+                    count += 1
+                if i < 10:
+                    ten_count += 1
+
+        ranks.append(i)
+        scores.append(score)
+        restore(data, data_s, rem_data_targ)
+        restore(data, data_s, rem_data_subs)
+        rem_data_targ = {}
+        rem_data_subs = {}
+        
+    cr, cs, co = get_len(data)
+    print("AFTER: {}, {}, {}".format(cr, cs, co))
+    print("Correct: {}".format(count/100))
+    print("Top 10: {}".format(ten_count/100))
+    print("Total Rules: {}".format(len(rs)))
+    print("Avg Score: {}".format(np.mean(scores)))
+    print("Std dev: {}".format(np.std(scores)))
+    print("Avg Ranks: {}".format(np.median(ranks)))
+    print("Std dev: {}".format(np.std(ranks)))
+    
+
+def combine_dicts(d1, ds1, d2):
+    for r in d2:
+        for s in d2[r]:
+            for o in d2[r][s]:
+                add_data(d1, r, s, o)
+                add_data(ds1, s, r, o)
+
+
+def do_split(data_fp, data_mod):
+    o_data, o_data_s = load_data(data_fp)
+    cn_rem, cn_rem_s = load_data(data_mod)
+    rem_data_targ = {}
+    rem_data_subs = {}
+    random.seed(123)
+    count = 0
+    ten_count = 0
+    scores = []
+    ranks = []
+    rem1 = 0
+    rem2 = 0
+    rules = {}
+    
+    rr = []
+    rr_change = []
+    
+    rs = o_data.keys()
+
+    sub = 0
+    k = 2
+
+    found_dict = {}
+    
+    data = copy.deepcopy(o_data)
+    data_s = copy.deepcopy(o_data_s)
+
+ 
+    d2 = copy.deepcopy(o_data)
+    ds2 = copy.deepcopy(o_data_s)
+    
+    cr, cs, co = get_len(data)
+    print("BEFORE: {},{},{}".format(cr, cs, co))
+
+    combine_dicts(data, data_s, cn_rem)
+
+    cr, cs, co = get_len(data)
+    print("BEFORE: {},{},{}".format(cr, cs, co))
+    
+    for j in tqdm(range(100)):
+        ret = None
+        cur_sub = sub
+        
+        s,r,o = select_target(o_data)
+        data, data_s, rem_data_targ = remove_r(data, data_s, rem_data_targ, s, [r], o)
+        d2, ds2, _ = remove_r(d2, ds2, {}, s, [r], o)
+        #cr, cs, co = get_len(data)
+        #print("REM: {},{},{}".format(cr, cs, co))
+
+        #CHECK
+        
+
+        #data = copy.deepcopy(o_data)
+        #data_s = copy.deepcopy(o_data_s)
+        
+
+        #data[r][s].remove(o)
+        #if len(data[r][s]) < 1:
+        #    del data[r][s]
+
+        #data_s[s][r].remove(o)
+        #if len(data_s[s][r]) < 1:
+        #    del data_s[s][r]
+
+        
+        while(ret==None):
+            top_rule_list = []
+            
+            
+            all_found_list = {}
+            
+            for r_check in rs:
+                #print("On rule {}".format(r_check))
+                if r_check not in rules:
+                    paths = random_sample_relation(data, data_s, r_check, sample_no=30, k = k)
+
+                    sorted_paths = {k: v for k, v in sorted(paths.items(), key=lambda item: item[1], reverse=True)}
+
+                    if (r_check,) in sorted_paths:
+                        del sorted_paths[r_check,]
+                    rules[r_check] = sorted_paths
+
+                #print(sorted_paths)
+
+
+                #res, num, rem = rulen_mod(s, r, o, rules[r], data, data_s, max_sub=0)
+                num, found_list = rulen_mod(s, r_check, o, rules[r_check], data, data_s, max_sub=0)
+                top_rule_list.append((r_check, num))
+                if found_list:
+                    #print("FOUND LIST: {}".format(found_list))
+                    all_found_list[r_check] = found_list
+
+            top_rule_list.sort(key=lambda x: x[1], reverse=True)
+            for i, (r_rank, score) in enumerate(top_rule_list):
+                if r == r_rank:
+                    #print("R at rank {}".format(i))
+                    break
+
+            if cur_sub == sub:
+                initial_rr = 1/(i+1)
+            if cur_sub > 0 and i == 0:
+                cur_sub -=1
+                print("HERE")
+                #print(all_found_list)
+                try:
+                    print("To del: {}".format(all_found_list[r][0][1]))
+                    data, data_s, rem_data_subs = remove_r(data, data_s, rem_data_subs, s, all_found_list[r][0][1], o)
+                except:
+                    print("WHY?")
+                    continue
+                
+            else:
+                ret = True
+                if i  == 0:
+                    count += 1
+                if i < 10:
+                    ten_count += 1
+
+        ranks.append(i)
+        rr.append((initial_rr, 1/(i+1)))
+        rr_change.append(initial_rr-1/(i+1))
+        scores.append(score)
+        restore(data, data_s, rem_data_targ)
+        rem_data_targ = {}
+        restore(data, data_s, rem_data_subs)
+        rem_data_subs = {}
+        
+    cr, cs, co = get_len(data)
+    print("AFTER: {}, {}, {}".format(cr, cs, co))
+    print("Correct: {}".format(count/100))
+    print("Top 10: {}".format(ten_count/100))
+    print("AVG DRR: {}".format(np.mean(rr_change)))
+    print("Total Rules: {}".format(len(rs)))
+    print("Avg Score: {}".format(np.mean(scores)))
+    print("Std dev: {}".format(np.std(scores)))
+    print("Avg Ranks: {}".format(np.median(ranks)))
+    print("Std dev: {}".format(np.std(ranks)))
+
+def do_single(data_fp, data_mod):
+    o_data, o_data_s = load_data(data_fp)
+    cn_rem, cn_rem_s = load_data(data_mod)
+    rem_data_targ = {}
+    rem_data_subs = {}
+    random.seed(123)
+    count = 0
+    ten_count = 0
+    scores = []
+    ranks = []
+    rem1 = 0
+    rem2 = 0
+    rules = {}
+    
+    rr = []
+    rr_change = []
+    
+    rs = o_data.keys()
+
+    sub = 5
+    k = 5
+
+    found_dict = {}
+    
+    data = copy.deepcopy(o_data)
+    data_s = copy.deepcopy(o_data_s)
+
+ 
+    d2 = copy.deepcopy(o_data)
+    ds2 = copy.deepcopy(o_data_s)
+    
+    cr, cs, co = get_len(data)
+    print("BEFORE: {},{},{}".format(cr, cs, co))
+
+    #combine_dicts(data, data_s, cn_rem)
+
+    #cr, cs, co = get_len(data)
+    #print("BEFORE: {},{},{}".format(cr, cs, co))
+
+
+    for j in tqdm(range(100)):
+        data = copy.deepcopy(o_data)
+        data_s = copy.deepcopy(o_data_s)
+        s,r,o = select_target(o_data)
+
+        data[r][s].remove(o)
+        if len(data[r][s]) < 1:
+            del data[r][s]
+
+        data_s[s][r].remove(o)
+        if len(data_s[s][r]) < 1:
+            del data_s[s][r]
+
+
+
+        top_rule_list = []
+        #START
+        for r_check in rs:
+             #print("On rule {}".format(r_check))
+             if r_check not in rules:
+                 paths = random_sample_relation(data, data_s, r_check, sample_no=30, k = k)
+
+                 sorted_paths = {k: v for k, v in sorted(paths.items(), key=lambda item: item[1], reverse=True)}
+
+                 if (r_check,) in sorted_paths:
+                     del sorted_paths[r_check,]
+                 rules[r_check] = sorted_paths
+
+             #print(sorted_paths)
+
+
+             #res, num, rem = rulen_mod(s, r, o, rules[r], data, data_s, max_sub=0)
+             num, found_list = rulen_mod(s, r_check, o, rules[r_check], data, data_s, max_sub=0)
+             top_rule_list.append((r_check, num))
+             if found_list:
+                 #print("FOUND LIST: {}".format(found_list))
+                 all_found_list[r_check] = found_list
+
+        top_rule_list.sort(key=lambda x: x[1], reverse=True)
+        for i, (r_rank, score) in enumerate(top_rule_list):
+             if r == r_rank:
+                 #print("R at rank {}".format(i))
+                 break
+
+        #if cur_sub == sub:
+        initial_rr = 1/(i+1)
+
+
+
+
+
+
+        old_score = score
+        cr, cs, co = get_len(cn_rem)
+        for i_r in cn_rem:
+            for i_s in cn_rem[i_r]:
+                for i_o in cn_rem[i_r][i_s]:
+                    add_data(data, i_r, i_s, i_o)
+                    add_data(data_s, i_s, i_r, i_o)
+                    #print("Adding: {}".format(i_r))
+                    ret = None
+                    cur_sub = sub
+
+                    top_rule_list = []
+                    all_found_list = {}
+
+                    num, found_list = rulen_mod(s, r, o, rules[r], data, data_s, max_sub=0)
+                    if num > score:
+                        count += 1
+                        
+                        data[i_r][i_s].remove(i_o)
+                        if len(data[i_r][i_s]) < 1:
+                            del data[i_r][i_s]
+                            
+                        data_s[i_s][i_r].remove(i_o)
+                        if len(data_s[i_s][i_r]) < 1:
+                            del data_s[i_s][i_r]
+
+
+
+
+
+        for r_check in rs:
+             #print("On rule {}".format(r_check))
+             if r_check not in rules:
+                 paths = random_sample_relation(data, data_s, r_check, sample_no=30, k = k)
+
+                 sorted_paths = {k: v for k, v in sorted(paths.items(), key=lambda item: item[1], reverse=True)}
+
+                 if (r_check,) in sorted_paths:
+                     del sorted_paths[r_check,]
+                 rules[r_check] = sorted_paths
+
+             #print(sorted_paths)
+
+
+             #res, num, rem = rulen_mod(s, r, o, rules[r], data, data_s, max_sub=0)
+             num, found_list = rulen_mod(s, r_check, o, rules[r_check], data, data_s, max_sub=0)
+             top_rule_list.append((r_check, num))
+             if found_list:
+                 #print("FOUND LIST: {}".format(found_list))
+                 all_found_list[r_check] = found_list
+
+        top_rule_list.sort(key=lambda x: x[1], reverse=True)
+        for i, (r_rank, score) in enumerate(top_rule_list):
+             if r == r_rank:
+                 #print("R at rank {}".format(i))
+                 break
+
+        ranks.append(i)
+        rr.append((initial_rr, 1/(i+1)))
+        rr_change.append(initial_rr-1/(i+1))
+        scores.append(score)
+        restore(data, data_s, rem_data_targ)
+        rem_data_targ = {}
+        restore(data, data_s, rem_data_subs)
+        rem_data_subs = {}
+
+    cr, cs, co = get_len(data)
+    print("AFTER: {}, {}, {}".format(cr, cs, co))
+    print("Correct: {}".format(count/100))
+    print("Top 10: {}".format(ten_count/100))
+    print("AVG DRR: {}".format(np.mean(rr_change)))
+    print("Total Rules: {}".format(len(rs)))
+    print("Avg Score: {}".format(np.mean(scores)))
+    print("Std dev: {}".format(np.std(scores)))
+    print("Avg Ranks: {}".format(np.median(ranks)))
+    print("Std dev: {}".format(np.std(ranks)))
+
+if __name__ == "__main__":
+    #data_fp = "./data/FB15k-237/train.txt"
+    data_fp = "./data/fb237_v1/train.txt"
+    mod_fp = "./data/fb237_v1/valid.txt"
+    do_split(data_fp, mod_fp)
+    #do_single(data_fp, mod_fp)
+    
+
