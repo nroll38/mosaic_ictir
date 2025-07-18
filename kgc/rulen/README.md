@@ -1,0 +1,1 @@
+Download and run GraIL in its directory and point the rulen scripts to it. The oracle will run RuleN multiple times to test each possible removal.
