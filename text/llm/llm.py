@@ -17,7 +17,6 @@ from copy import deepcopy
 
 
 os.environ["REPLICATE_API_TOKEN"] = "[REPLICATE KEY HERE]"
-#api_key = "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"
 api_key = "[OPEN AI KEY HERE]"
 os.environ["OPENAI_API_KEY"] ="[OPEN AI KEY HERE]"
 
@@ -111,10 +110,7 @@ def update_sp(metrics, prediction, gold):
 
 
 import torch
-#from transformers import LlamaTokenizer, LlamaForCausalLM
 from datasets import load_dataset
-#from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-#from unsloth import FastLanguageModel
 
 import replicate
 import time
@@ -124,103 +120,18 @@ import anthropic
 
 
 
-# Load the local weights for the LLaMA model
+
 def load_llama_model(model_path, tokenizer_path, max_length=2048):
-    # Load the tokenizer and model
-    # tokenizer = LlamaTokenizer.from_pretrained(tokenizer_path)
-    #def remove_punc(text):
-    #   exclude = set(string.punctuation)
-    # model = LlamaForCausalLM.from_pretrained(model_path)
-
-    #bnb_config = BitsAndBytesConfig(
-    #  load_in_4bit=True, bnb_4bit_use_double_quant=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16
-    #)
-
-
-    #tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, quantization_config=bnb_config)
-    #model = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=torch.float16)
-
 
     tokenizer = None
     model = None
-
-    # dtype = None # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
-    # load_in_4bit = True # Use 4bit quantization to reduce memory usage. Can be False.
-
-    # model, tokenizer = FastLanguageModel.from_pretrained(
-    #   model_name = "unsloth/Meta-Llama-3.1-8B",
-    #   max_seq_length = max_length,
-    #   dtype = dtype,
-    #   load_in_4bit = load_in_4bit,
-    #   # token = "hf_...", # use one IR7WdfwJ9gwmftrPah4qW2mmZ8e"if using gated models like meta-llama/Llama-2-7b-hf
-    # )
-
     return tokenizer, model
 
-# Function to perform question answering
-# def answer_question(model, tokenizer, question, context, max_length=2048):
-#     device = 'cuda' #if torch.cuda.is_available() else 'cpu'
-#     #model.to(device)
-
-#     # Format the input for the model
-#     preprompt = "Answer the following question using only the information in the provided context. \n"
-#     input_text = preprompt + f"Question: {question} Context: {context} Answer:"
-#     inputs = tokenizer(input_text, return_tensors='pt', truncation=True, padding=True).to(device)
-
-#     # Generate the answer
-#     with torch.no_grad():
-#         outputs = model.generate(inputs['input_ids'], max_length=max_length)
-
-#     answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
-#     return answer
-#nswer": "Arthur's Magazine", "pred_answer": "Arthur's Magazine", "metrics": {"em": 1.0, "f1": 1.0, "prec": 1.0, "recall": 1.0}, "count": 0}
-
-# def id_sents(model, tokenizer, question, context, gp="", max_length=2048):
-#     #preprompt = "Provide a list of sentences found only in the \"Target Paragraph\" must be removed in order to prevent answering the question given the target paragraph and the context paragraphs.\n\n"
-#     preprompt = "List the sentences found only in the \"Target Paragraph\" in order from most to least important in answering the question given the target paragraph and the context paragraphs.\n\n"
-
-#     input_text = preprompt + f"Question: {question}\n\nTarget Paragraph: {gp}\n\nContext: {context}\n\nSentence List: "
-
-#     #print("Input: " + input_text)
-#     #print("*"*50)
-#     input = {
-#       "top_p": 0.9,
-#       "prompt": input_text,
-#       "min_tokens": 1,
-#       "temperature": 0.0,
-#       "max_tokens": 2000,
-#       "length_penalty": 3,
-#     }
-
-#     # for event in replicate.stream(
-#     #   "meta/meta-llama-3-8b",
-#     #   input=input
-#     # ):
-
-#     # print(event, end="")
-
-#     #print("RUNNING")
-#     answer = replicate.run(
-#         "meta/meta-llama-3-8b-instruct",
-#         input=input,
-#         wait=True
-#     )
-
-
-#     #print("RETURNED: {}".format(answer))
-#     #answer = "".join(answer).split("\n")
-#     #return answer[0].strip()
-
-#     answer = "".join(answer)
-#     return answer
 
 def answer_question_claude(model, tokenizer, question, context, gp="", max_length=2048, preprompt_in=None):
 
     if not preprompt_in:
-      #preprompt = "Answer the following question using only the information in the provided context. Provide your reasoning first and then list factoid answer by itself on a new line. Finally, provide a numbered list of the two most significant sentences from the context that explain your answer.\n\n"
-      #preprompt = "Answer the following question using only the information in the provided target paragraph and context. Provide your reasoning first and then list factoid answer by itself on a new line. Finally, provide a numbered list of the two most significant sentences from the \"Target Paragraph\" that explain your answer.\n\n"
       preprompt = "Answer the following question using only the information in the provided target paragraph and context. Provide your reasoning first and then list factoid answer by itself on a new line. Finally, provide the most significant sentence from the \"Target Paragraph\" that explains your answer, prepended by a \"1.\".\n\n"
-      #preprompt = "List the sentences found only in the \"Target Paragraph\" in order from most to least important in answering the question given the target paragraph and the context paragraphs.\n\n"
     else:
       preprompt = preprompt_in
 
@@ -238,82 +149,65 @@ def answer_question_claude(model, tokenizer, question, context, gp="", max_lengt
             {"role": "user", "content": input_text}
         ]
     )
-    #print(message.content[0].text)
+
 
     answer = message.content[0].text
-
-    #print("RETURNED: {}".format(answer))
-    #answer = "".join(answer).split("\n")
-    #return answer[0].strip()
-
-    # answer = "".join
     return answer
 
 
 def answer_question(model, tokenizer, question, context, gp="", max_length=2048, preprompt_in=None):
 
-    #preprompt = "Provide a brief answer and no explanation for the following question using only the information in the provided context.\n\n"
+    use_gpt = True
+    
     if not preprompt_in:
 
-      #preprompt = "Answer the following question using only the information in the provided context. Provide your reasoning first and then list factoid answer by itself on a new line. Finally, provide a numbered list of the two most significant sentences from the context that explain your answer.\n\n"
-      #preprompt = "Answer the following question using only the information in the provided target paragraph and context. Provide your reasoning first and then list factoid answer by itself on a new line. Finally, provide a numbered list of the two most significant sentences from the \"Target Paragraph\" that explain your answer.\n\n"
       preprompt = "Answer the following question using only the information in the provided target paragraph and context. Provide your reasoning first and then list factoid answer by itself on a new line. Finally, provide the most significant sentence from the \"Target Paragraph\" that explains your answer, prepended by a \"1.\".\n\n"
-      #preprompt = "List the sentences found only in the \"Target Paragraph\" in order from most to least important in answering the question given the target paragraph and the context paragraphs.\n\n"
+
     else:
       preprompt = preprompt_in
 
-    #input_text = preprompt + f"Question: {question}\n\n Context: {gp}\n\n{context}\n\nReasoning: "
+
     input_text = preprompt + f"Question: {question}\n\nTarget Paragraph: {gp}\n\nContext: {context}\n\nReasoning: "
 
+    if use_gpt:
+        input = {
+          "top_p": 0.9,
+          "prompt": input_text,
+          "min_tokens": 1,
+          "temperature": 0.0,
+          "max_tokens": 2000,
+          "length_penalty": 3,
+        }
 
-    input = {
-      "top_p": 0.9,
-      "prompt": input_text,
-      "min_tokens": 1,
-      "temperature": 0.0,
-      "max_tokens": 2000,
-      "length_penalty": 3,
-    }
+        msg = [{"role": "user", "content": input_text}]
+        client = OpenAI(api_key=api_key)
+        answer = client.chat.completions.create(
+            model="gpt-4o-2024-08-06",
+            messages=msg,
+            temperature=0.0,
+            max_tokens=2000,
+            top_p=1,
+            frequency_penalty=0.0,
+            presence_penalty=0.0,
+        )
 
-    # for event in replicate.stream(
-    #   "meta/meta-llama-3-8b",
-    #   input=input
-    # ):
+        answer=answer.choices[0].message.content
+    else:
+    for event in replicate.stream(
+          "meta/meta-llama-3-8b",
+          input=input
+        ):
 
-    # print(event, end="")
+        print(event, end="")
 
-    #print("RUNNING")
-    # answer = replicate.run(
-    #     "meta/meta-llama-3-70b-instruct",
-    #     input=input,
-    #     wait=True
-    # )
+        print("RUNNING")
+        answer = replicate.run(
+            "meta/meta-llama-3-70b-instruct",
+            input=input,
+            wait=True
+        )
+        answer = "".join
 
-
-
-
-    msg = [{"role": "user", "content": input_text}]
-    client = OpenAI(api_key=api_key)
-    answer = client.chat.completions.create(
-        model="gpt-4o-2024-08-06",
-        #model="gpt-4-0314",
-        messages=msg,
-        temperature=0.0,
-        max_tokens=2000,
-        top_p=1,
-        frequency_penalty=0.0,
-        presence_penalty=0.0,
-        #stop=["\n"]
-    )
-    # # return response
-
-    answer=answer.choices[0].message.content
-
-    #print("RETURNED: {}".format(answer))
-    #answer = "".join(answer).split("\n")
-    #return answer[0].strip()
-
-    # answer = "".join
     return answer
 
 
@@ -360,174 +254,7 @@ def get_claude_answer(temp_split):
   return temp_answer, temp_sentences
 
 
-import torch
-#from transformers import LlamaTokenizer, LlamaForCausalLM
-from datasets import load_dataset
-#from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
-#from unsloth import FastLanguageModel
 
-import replicate
-import time
-import random
-import copy
-
-
-
-# Load the local weights for the LLaMA model
-def load_llama_model(model_path, tokenizer_path, max_length=2048):
-    # Load the tokenizer and model
-    # tokenizer = LlamaTokenizer.from_pretrained(tokenizer_path)
-    #def remove_punc(text):
-    #   exclude = set(string.punctuation)
-    # model = LlamaForCausalLM.from_pretrained(model_path)
-
-    #bnb_config = BitsAndBytesConfig(
-    #  load_in_4bit=True, bnb_4bit_use_double_quant=True, bnb_4bit_quant_type="nf4", bnb_4bit_compute_dtype=torch.bfloat16
-    #)
-
-
-    #tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, quantization_config=bnb_config)
-    #model = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=torch.float16)
-
-
-    tokenizer = None
-    model = None
-
-    # dtype = None # None for auto detection. Float16 for Tesla T4, V100, Bfloat16 for Ampere+
-    # load_in_4bit = True # Use 4bit quantization to reduce memory usage. Can be False.
-
-    # model, tokenizer = FastLanguageModel.from_pretrained(
-    #   model_name = "unsloth/Meta-Llama-3.1-8B",
-    #   max_seq_length = max_length,
-    #   dtype = dtype,
-    #   load_in_4bit = load_in_4bit,
-    #   # token = "hf_...", # use one IR7WdfwJ9gwmftrPah4qW2mmZ8e"if using gated models like meta-llama/Llama-2-7b-hf
-    # )
-
-    return tokenizer, model
-
-# Function to perform question answering
-# def answer_question(model, tokenizer, question, context, max_length=2048):
-#     device = 'cuda' #if torch.cuda.is_available() else 'cpu'
-#     #model.to(device)
-
-#     # Format the input for the model
-#     preprompt = "Answer the following question using only the information in the provided context. \n"
-#     input_text = preprompt + f"Question: {question} Context: {context} Answer:"
-#     inputs = tokenizer(input_text, return_tensors='pt', truncation=True, padding=True).to(device)
-
-#     # Generate the answer
-#     with torch.no_grad():
-#         outputs = model.generate(inputs['input_ids'], max_length=max_length)
-
-#     answer = tokenizer.decode(outputs[0], skip_special_tokens=True)
-#     return answer
-#nswer": "Arthur's Magazine", "pred_answer": "Arthur's Magazine", "metrics": {"em": 1.0, "f1": 1.0, "prec": 1.0, "recall": 1.0}, "count": 0}
-
-# def id_sents(model, tokenizer, question, context, gp="", max_length=2048):
-#     #preprompt = "Provide a list of sentences found only in the \"Target Paragraph\" must be removed in order to prevent answering the question given the target paragraph and the context paragraphs.\n\n"
-#     preprompt = "List the sentences found only in the \"Target Paragraph\" in order from most to least important in answering the question given the target paragraph and the context paragraphs.\n\n"
-
-#     input_text = preprompt + f"Question: {question}\n\nTarget Paragraph: {gp}\n\nContext: {context}\n\nSentence List: "
-
-#     #print("Input: " + input_text)
-#     #print("*"*50)
-#     input = {
-#       "top_p": 0.9,
-#       "prompt": input_text,
-#       "min_tokens": 1,
-#       "temperature": 0.0,
-#       "max_tokens": 2000,
-#       "length_penalty": 3,
-#     }
-
-#     # for event in replicate.stream(
-#     #   "meta/meta-llama-3-8b",
-#     #   input=input
-#     # ):
-
-#     # print(event, end="")
-
-#     #print("RUNNING")
-#     answer = replicate.run(
-#         "meta/meta-llama-3-8b-instruct",
-#         input=input,
-#         wait=True
-#     )
-
-
-#     #print("RETURNED: {}".format(answer))
-#     #answer = "".join(answer).split("\n")
-#     #return answer[0].strip()
-
-#     answer = "".join(answer)
-#     return answer
-
-
-def answer_question(model, tokenizer, question, context, gp="", max_length=2048, preprompt_in=None):
-
-    #preprompt = "Provide a brief answer and no explanation for the following question using only the information in the provided context.\n\n"
-    if not preprompt_in:
-
-      #preprompt = "Answer the following question using only the information in the provided context. Provide your reasoning first and then list factoid answer by itself on a new line. Finally, provide a numbered list of the two most significant sentences from the context that explain your answer.\n\n"
-      #preprompt = "Answer the following question using only the information in the provided target paragraph and context. Provide your reasoning first and then list factoid answer by itself on a new line. Finally, provide a numbered list of the two most significant sentences from the \"Target Paragraph\" that explain your answer.\n\n"
-      preprompt = "Answer the following question using only the information in the provided target paragraph and context. Provide your reasoning first and then list factoid answer by itself on a new line. Finally, provide the most significant sentence from the \"Target Paragraph\" that explains your answer, prepended by a \"1.\".\n\n"
-      #preprompt = "List the sentences found only in the \"Target Paragraph\" in order from most to least important in answering the question given the target paragraph and the context paragraphs.\n\n"
-    else:
-      preprompt = preprompt_in
-
-    #input_text = preprompt + f"Question: {question}\n\n Context: {gp}\n\n{context}\n\nReasoning: "
-    input_text = preprompt + f"Question: {question}\n\nTarget Paragraph: {gp}\n\nContext: {context}\n\nReasoning: "
-
-
-    input = {
-      "top_p": 0.9,
-      "prompt": input_text,
-      "min_tokens": 1,
-      "temperature": 0.0,
-      "max_tokens": 2000,
-      "length_penalty": 3,
-    }
-
-    # for event in replicate.stream(
-    #   "meta/meta-llama-3-8b",
-    #   input=input
-    # ):
-
-    # print(event, end="")
-
-    #print("RUNNING")
-    # answer = replicate.run(
-    #     "meta/meta-llama-3-70b-instruct",
-    #     input=input,
-    #     wait=True
-    # )
-
-
-
-
-    msg = [{"role": "user", "content": input_text}]
-    client = OpenAI(api_key=api_key)
-    answer = client.chat.completions.create(
-        model="gpt-4o-2024-08-06",
-        #model="gpt-4-0314",
-        messages=msg,
-        temperature=0.0,
-        max_tokens=2000,
-        top_p=1,
-        frequency_penalty=0.0,
-        presence_penalty=0.0,
-        #stop=["\n"]
-    )
-    # # return response
-
-    answer=answer.choices[0].message.content
-
-    #print("RETURNED: {}".format(answer))
-    #answer = "".join(answer).split("\n")
-    #return answer[0].strip()
-
-    # answer = "".join
     return answer
 
 # Main function to run question answering on a subset of HotpotQA
@@ -547,26 +274,11 @@ def run_qa_on_hotpotqa(model_path, tokenizer_path, out_path, redact=False):
     max_em_drop = 0
 
     gen_path = "./"
-
-    #dataset_path = "/content/drive/MyDrive/colab_data/hpqa/Splits/4k_retr/4k_dev_colbert.json"
-    #dataset_path = "/content/drive/MyDrive/colab_data/hpqa/Splits/4k_retr/4k_dev_bm25.json"
-
-
-    #tokenizer, model = load_llama_model(model_path, tokenizer_path, max_length)
-    #FastLanguageModel.for_inference(model)
-
-    #tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-    #dataset_all = load_dataset("hotpot_qa", "distractor", split="train", trust_remote_code=True)
     dataset_all = load_dataset("hotpot_qa", "distractor", split="validation", trust_remote_code=True)
     random.seed(1234)
     dataset = list(dataset_all)[:4000]
-    #dataset = random.sample(list(dataset_all), 1000)
-
-    #with open(dataset_path, "r") as fp:
-    #  dataset = json.load(fp)
 
     print(len(dataset))
-    # Iterate over the examples in the subset and answer the questions
     answers = {}
 
     metrics = {'em': 0, 'f1': 0, 'prec': 0, 'recall': 0}
@@ -577,13 +289,8 @@ def run_qa_on_hotpotqa(model_path, tokenizer_path, out_path, redact=False):
     bad_count = 0
     for count, example in enumerate(dataset):
       try:
-      #if True:
-        #print(example["supporting_facts"])
-        #print(example["context"]["sentences"])
-
         gold_index = 0
         for i, cont in enumerate(example["context"]["title"]):
-          #print(cont)
           if cont == example["supporting_facts"]["title"][0]:
             gold_index = i
             gold_para = " ".join(example["context"]["sentences"][i])
@@ -600,12 +307,8 @@ def run_qa_on_hotpotqa(model_path, tokenizer_path, out_path, redact=False):
         answer=""
         sentences=[]
         ans_next = False
-        #print("Q: " + question)
         response = answer_question(model, tokenizer, question, context, gp=gold_para, max_length=max_length)
-        #print("RESP: {}".format(response))
         split = "".join(response).split("\n")
-        #print(split)
-        #return
 
 
 
@@ -618,7 +321,6 @@ def run_qa_on_hotpotqa(model_path, tokenizer_path, out_path, redact=False):
           if "1." in line or "2." in line:
             sentences.append(line[2:].strip())
             if (sentences[-1].endswith("\"") and sentences[-1][0]==("\"")) or (sentences[-1].endswith("\'") and sentences[-1][0]==("\'")):
-              #print(sentences[-1][1:-1])
               sentences[-1] = sentences[-1][1:-1]
 
         em, prec, recall, f1 = update_answer(metrics, answer, example["answer"])
@@ -644,8 +346,6 @@ def run_qa_on_hotpotqa(model_path, tokenizer_path, out_path, redact=False):
         answers[example["id"]]["blockers"] = []
         answers[example["id"]]["selected"] = []
 
-
-
         delta_em = 0
         delta_f1 = 0
 
@@ -659,54 +359,31 @@ def run_qa_on_hotpotqa(model_path, tokenizer_path, out_path, redact=False):
                 in_gold += 1
 
         if em:
-
-
             redacted = False
-
-
-
-
             delta_em = 0
             delta_f1 = 0
-
             tmax_em_drop = 0
             gold_em = 0
             gold_f1 = 0
-
             gold_ems = []
             gold_f1s = []
             max_id = []
-
             supporting_index = []
-
 
             temp_contexts = deepcopy(example['context']["sentences"])
             for i in range(len(example["context"]["sentences"][gold_index])):
-              #for i in range(1):
               temp_contexts[gold_index] = deepcopy(example["context"]["sentences"][gold_index])
               temp_contexts[gold_index][i] = "[REDACTED]"
-              #temp_contexts[gold_index] = [[]]
-
-              #temp_sent = " ".join(temp_contexts[gold_index])
-              #temp_sent = ' '.join(temp_sent.split())
-              #print(example["context"]["sentences"][gold_index])
               new_contexts = []
               for j in range(len(temp_contexts)):
                 if j == gold_index:
                   temp_sent = " ".join(temp_contexts[j])
                   temp_sent = ' '.join(temp_sent.split())
-                  #new_contexts.append(temp_sent)
-                  #temp_sent = ""
                   gold_para = temp_sent
                   continue
                 new_contexts.append(" ".join(temp_contexts[j]))
               temp_context = "\n\n".join(new_contexts)
-              #print("GP: {}".format(temp_sent))
-              #print(temp_context)
 
-
-
-              # Get the answer from the model
               temp_response = answer_question(model, tokenizer, question, temp_context, gp=temp_sent, max_length=max_length)
               temp_split = "".join(temp_response).split("\n")
 
@@ -722,17 +399,15 @@ def run_qa_on_hotpotqa(model_path, tokenizer_path, out_path, redact=False):
                 elif "1." in line or "2." in line:
                   temp_sentences.append(line[2:].strip())
                   if (temp_sentences[-1].endswith("\"") and temp_sentences[-1][0]==("\"")) or (temp_sentences[-1].endswith("\'") and temp_sentences[-1][0]==("\'")):
-                    #print(sentences[-1][1:-1])
                     temp_sentences[-1] = temp_sentences[-1][1:-1]
 
               r_em, r_prec, r_recall, r_f1 = update_answer(temp_metrics, temp_answer, example["answer"])
 
               if em and not r_em:
-                tmax_em_drop = True#em - r_em
+                tmax_em_drop = True
                 max_id.append(i)
 
-                #TESTESTEST
-                all_remove = False#True
+                all_remove = False
                 if (golds_idd and i in golds_idd) or all_remove == True:
                   gold_em = r_em
                   gold_f1 = r_f1
@@ -749,9 +424,6 @@ def run_qa_on_hotpotqa(model_path, tokenizer_path, out_path, redact=False):
                 overlap_count += 1
                 break
 
-
-            #answers[example["id"]]["r_answer"] = temp_answer
-            #answers[example["id"]]["r_sentences"] = temp_sentences
             answers[example["id"]]["r_em"] = gold_ems
             answers[example["id"]]["r_f1"] = gold_f1s
             answers[example["id"]]["max_em_drop"] = max_em_drop
@@ -761,10 +433,8 @@ def run_qa_on_hotpotqa(model_path, tokenizer_path, out_path, redact=False):
 
 
             answers[example["id"]]["sentences"] = sentences
-            #answers[example["id"]]["em"] = em
             answers[example["id"]]["delta_em"] = delta_em
             answers[example["id"]]["delta_f1"] = delta_f1
-            #answers[example["id"]]["selected"] = copy.deepcopy(golds_idd)
 
 
             total_delta_em += delta_em
@@ -775,20 +445,6 @@ def run_qa_on_hotpotqa(model_path, tokenizer_path, out_path, redact=False):
             if delta_f1 != 0:
               total_nonzero_f1 += 1
 
-            # for i in golds_idd:
-            #   if i not in max_id:
-            #     print(example["id"])
-            #     print(answers[example["id"]])
-            #     print("*"*20)
-
-
-
-
-        #TEST
-        #print(answers[example["id"]])
-
-        #return
-        #print(metrics)
         answers[example["id"]]["metrics"] = metrics
         answers[example["id"]]["count"] = count
         answers[example["id"]]["g_idd"] = copy.deepcopy(golds_idd)
@@ -796,7 +452,6 @@ def run_qa_on_hotpotqa(model_path, tokenizer_path, out_path, redact=False):
 
         count+=1
         if count % 50 == 0:
-        #if True:
             print("At {}".format(count))
             print("Running Time: {}".format(time.time()-start))
             print("Sent Count: {}".format(sent_count))
